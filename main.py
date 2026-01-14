@@ -259,7 +259,7 @@ async def cmd_start(message: Message, state: FSMContext):
                         referrer_id, 
                         f"🎉 <b>Yangi referal!</b>\n\n"
                         f"👤 <b>{message.from_user.first_name}</b> sizning havolangiz orqali qo'shildi.\n\n"
-                        f"� <b>+{REFERRAL_REWARD:,} so'm</b> balansingizga qo'shildi!\n"
+                        f"💰 <b>+{REFERRAL_REWARD:,} so'm</b> balansingizga qo'shildi!\n"
                         f"💵 Joriy balans: <b>{balance_info['balance']:,}</b> so'm\n"
                         f"👥 Jami referallar: <b>{ref_count}</b> ta"
                     )
@@ -383,8 +383,8 @@ async def show_support(message: Message, state: FSMContext):
     await message.answer(
         "🆘 <b>Qo'llab-quvvatlash</b>\n\n"
         "Savollaringiz yoki muammolaringiz bo'lsa, bizga murojaat qiling:\n\n"
-        "� Kanal: @daromatx\n"
-        "� Admin: @daromatx_admin",
+        "📢 Kanal: @daromatx\n"
+        "👤 Admin: @daromatx_admin",
         reply_markup=kb.main_menu_keyboard()
     )
 
@@ -853,7 +853,7 @@ async def disable_online(message: Message):
         reply_markup=kb.services_keyboard()
     )
 
-@router.message(F.text == "� Sessiyani o'chirish")
+@router.message(F.text == "🗑 Sessiyani o'chirish")
 async def delete_session(message: Message):
     """Foydalanuvchi sessiyasini o'chirish"""
     user_id = message.from_user.id

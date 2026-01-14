@@ -20,6 +20,10 @@ DATABASE_FILE = "bot_database.db"
 # User sessions papkasi
 SESSIONS_DIR = "sessions"
 
+# Referal tizimi
+REFERRAL_REWARD = 1000  # Har bir referal uchun 1000 so'm
+MIN_WITHDRAWAL = 15000  # Minimal pul yechish 15000 so'm
+
 # Bot haqida
 BOT_NAME = "Tahlilchi Bot"
 BOT_VERSION = "1.0"

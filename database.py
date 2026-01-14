@@ -130,6 +130,31 @@ def init_database():
         )
     ''')
     
+    # Foydalanuvchi balansi
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS balances (
+            user_id INTEGER PRIMARY KEY,
+            balance INTEGER DEFAULT 0,
+            total_earned INTEGER DEFAULT 0,
+            total_withdrawn INTEGER DEFAULT 0,
+            updated_at TEXT
+        )
+    ''')
+    
+    # Pul yechish so'rovlari
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS withdrawals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            amount INTEGER,
+            card_number TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at TEXT,
+            processed_at TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -575,6 +600,121 @@ def remove_bot_started(user_id, bot_username):
     ''', (user_id, bot_username.lower()))
     conn.commit()
     conn.close()
+
+# ============ Balans tizimi ============
+
+def get_user_balance(user_id):
+    """Foydalanuvchi balansini olish"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM balances WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if result:
+        return dict(result)
+    return {'user_id': user_id, 'balance': 0, 'total_earned': 0, 'total_withdrawn': 0}
+
+def add_balance(user_id, amount):
+    """Foydalanuvchi balansiga pul qo'shish"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    
+    # Avval mavjud balansni tekshirish
+    cursor.execute('SELECT balance, total_earned FROM balances WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    
+    if result:
+        new_balance = result['balance'] + amount
+        new_total = result['total_earned'] + amount
+        cursor.execute('''
+            UPDATE balances SET balance = ?, total_earned = ?, updated_at = ?
+            WHERE user_id = ?
+        ''', (new_balance, new_total, now, user_id))
+    else:
+        cursor.execute('''
+            INSERT INTO balances (user_id, balance, total_earned, total_withdrawn, updated_at)
+            VALUES (?, ?, ?, 0, ?)
+        ''', (user_id, amount, amount, now))
+    
+    conn.commit()
+    conn.close()
+
+def subtract_balance(user_id, amount):
+    """Foydalanuvchi balansidan pul ayirish"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    
+    cursor.execute('SELECT balance, total_withdrawn FROM balances WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    
+    if result and result['balance'] >= amount:
+        new_balance = result['balance'] - amount
+        new_withdrawn = result['total_withdrawn'] + amount
+        cursor.execute('''
+            UPDATE balances SET balance = ?, total_withdrawn = ?, updated_at = ?
+            WHERE user_id = ?
+        ''', (new_balance, new_withdrawn, now, user_id))
+        conn.commit()
+        conn.close()
+        return True
+    
+    conn.close()
+    return False
+
+def create_withdrawal(user_id, amount, card_number):
+    """Pul yechish so'rovi yaratish"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    
+    cursor.execute('''
+        INSERT INTO withdrawals (user_id, amount, card_number, status, created_at)
+        VALUES (?, ?, ?, 'pending', ?)
+    ''', (user_id, amount, card_number, now))
+    conn.commit()
+    withdrawal_id = cursor.lastrowid
+    conn.close()
+    return withdrawal_id
+
+def get_pending_withdrawals():
+    """Kutilayotgan pul yechish so'rovlarini olish"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT w.*, u.first_name, u.username 
+        FROM withdrawals w 
+        JOIN users u ON w.user_id = u.user_id 
+        WHERE w.status = 'pending'
+        ORDER BY w.created_at ASC
+    ''')
+    result = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in result]
+
+def process_withdrawal(withdrawal_id, status):
+    """Pul yechish so'rovini tasdiqlash/rad etish"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    
+    cursor.execute('''
+        UPDATE withdrawals SET status = ?, processed_at = ?
+        WHERE id = ?
+    ''', (status, now, withdrawal_id))
+    conn.commit()
+    conn.close()
+
+def get_withdrawal_by_id(withdrawal_id):
+    """ID bo'yicha pul yechish so'rovini olish"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM withdrawals WHERE id = ?', (withdrawal_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return dict(result) if result else None
 
 # Database ni ishga tushirish
 if __name__ == "__main__":

@@ -146,10 +146,40 @@ def check_subscription_keyboard(channels):
 
 def referral_keyboard(bot_username, user_id):
     ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
-    share_url = f"https://t.me/share/url?url={ref_link}"
+    share_text = f"🎁 Bu bot orqali pul ishlang! Har bir taklif uchun 1000 so'm!\n\n{ref_link}"
+    share_url = f"https://t.me/share/url?url={ref_link}&text=🎁 Bu bot orqali pul ishlang! Har bir taklif uchun 1000 so'm!"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📤 Havolani ulashish", url=share_url)],
-        [InlineKeyboardButton(text="📋 Havolani nusxalash", callback_data="copy_ref_link")]
+        [InlineKeyboardButton(text="� Pul yechish", callback_data="withdraw_money")],
+        [InlineKeyboardButton(text="📊 Mening statistikam", callback_data="my_ref_stats")]
+    ])
+    return keyboard
+
+
+def withdraw_keyboard():
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Pul yechish", callback_data="start_withdraw")],
+        [InlineKeyboardButton(text="⬅️ Orqaga", callback_data="back_to_referral")]
+    ])
+    return keyboard
+
+
+def admin_withdrawals_keyboard(withdrawals):
+    buttons = []
+    for w in withdrawals:
+        buttons.append([InlineKeyboardButton(
+            text=f"#{w['id']} - {w['first_name']} - {w['amount']} so'm",
+            callback_data=f"view_withdrawal_{w['id']}"
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def process_withdrawal_keyboard(withdrawal_id):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"approve_withdrawal_{withdrawal_id}"),
+            InlineKeyboardButton(text="❌ Rad etish", callback_data=f"reject_withdrawal_{withdrawal_id}")
+        ]
     ])
     return keyboard
 

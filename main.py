@@ -18,7 +18,7 @@ from pyrogram.errors import (
     PasswordHashInvalid, PhoneNumberInvalid, FloodWait
 )
 
-from config import BOT_TOKEN, ADMINS, SESSIONS_DIR
+from config import BOT_TOKEN, ADMINS, SESSIONS_DIR, REFERRAL_REWARD, MIN_WITHDRAWAL
 import database as db
 import keyboards as kb
 
@@ -71,6 +71,9 @@ class TelegramLoginState(StatesGroup):
 
 class AddBotState(StatesGroup):
     waiting_for_username = State()
+
+class WithdrawState(StatesGroup):
+    waiting_for_card = State()
 
 # ============ Yordamchi funksiyalar ============
 
@@ -246,14 +249,19 @@ async def cmd_start(message: Message, state: FSMContext):
             referrer_id = int(args[1].replace("ref_", ""))
             if referrer_id != message.from_user.id and not db.has_referrer(message.from_user.id):
                 db.add_referral(referrer_id, message.from_user.id)
+                # Taklif qilgan odamga pul qo'shish
+                db.add_balance(referrer_id, REFERRAL_REWARD)
                 # Taklif qilgan odamga xabar yuborish
                 try:
                     ref_count = db.get_referral_count(referrer_id)
+                    balance_info = db.get_user_balance(referrer_id)
                     await bot.send_message(
                         referrer_id, 
-                        f"🎉 Yangi referal!\n\n"
-                        f"<b>{message.from_user.first_name}</b> sizning havolangiz orqali qo'shildi.\n"
-                        f"📊 Jami referallaringiz: <b>{ref_count}/{REQUIRED_REFERRALS}</b>"
+                        f"🎉 <b>Yangi referal!</b>\n\n"
+                        f"👤 <b>{message.from_user.first_name}</b> sizning havolangiz orqali qo'shildi.\n\n"
+                        f"� <b>+{REFERRAL_REWARD:,} so'm</b> balansingizga qo'shildi!\n"
+                        f"💵 Joriy balans: <b>{balance_info['balance']:,}</b> so'm\n"
+                        f"👥 Jami referallar: <b>{ref_count}</b> ta"
                     )
                 except:
                     pass
@@ -339,17 +347,28 @@ async def show_referral(message: Message, state: FSMContext):
     
     user_id = message.from_user.id
     ref_count = db.get_referral_count(user_id)
+    balance_info = db.get_user_balance(user_id)
     bot_info = await bot.get_me()
     ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
+    
+    balance = balance_info['balance']
+    total_earned = balance_info['total_earned']
     
     status = "✅ Xizmatlarga kirish ochiq!" if ref_count >= REQUIRED_REFERRALS else f"🔒 Xizmatlarga kirish uchun yana {REQUIRED_REFERRALS - ref_count} ta referal kerak"
     
     await message.answer(
-        f"👥 <b>Referal tizimi</b>\n\n"
-        f"📊 Jami referallaringiz: <b>{ref_count}/{REQUIRED_REFERRALS}</b>\n"
+        f"👥 <b>Referal tizimi - Pul ishlang!</b>\n\n"
+        f"💰 <b>Har bir taklif uchun:</b> {REFERRAL_REWARD:,} so'm\n"
+        f"📤 <b>Minimal yechish:</b> {MIN_WITHDRAWAL:,} so'm\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"📊 <b>Sizning statistikangiz:</b>\n"
+        f"👥 Jami referallar: <b>{ref_count}</b> ta\n"
+        f"💵 Joriy balans: <b>{balance:,}</b> so'm\n"
+        f"💰 Jami ishlangan: <b>{total_earned:,}</b> so'm\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
         f"{status}\n\n"
-        f"📎 Sizning referal havolangiz:\n<code>{ref_link}</code>\n\n"
-        f"💡 Do'stlaringizga yuboring va ular /start bosganidan keyin sizga hisoblanadi!",
+        f"📎 <b>Sizning referal havolangiz:</b>\n<code>{ref_link}</code>\n\n"
+        f"💡 Do'stlaringizga yuboring - ular /start bosishi bilan sizga {REFERRAL_REWARD:,} so'm tushadi!",
         reply_markup=kb.referral_keyboard(bot_info.username, user_id)
     )
 
@@ -1595,6 +1614,259 @@ async def check_subscription_callback(callback: CallbackQuery):
         )
     else:
         await callback.answer("❌ Siz hali barcha kanallarga obuna bo'lmadingiz!", show_alert=True)
+
+# ============ Referal va Pul yechish callback handlerlari ============
+
+@router.callback_query(F.data == "withdraw_money")
+async def withdraw_money_callback(callback: CallbackQuery):
+    """Pul yechish bo'limi"""
+    user_id = callback.from_user.id
+    balance_info = db.get_user_balance(user_id)
+    balance = balance_info['balance']
+    
+    await callback.message.edit_text(
+        f"💰 <b>Pul yechish</b>\n\n"
+        f"💵 Joriy balansingiz: <b>{balance:,}</b> so'm\n"
+        f"📤 Minimal yechish: <b>{MIN_WITHDRAWAL:,}</b> so'm\n\n"
+        f"{'✅ Siz pul yechishingiz mumkin!' if balance >= MIN_WITHDRAWAL else f'❌ Pul yechish uchun yana {MIN_WITHDRAWAL - balance:,} som kerak.'}",
+        reply_markup=kb.withdraw_keyboard()
+    )
+
+@router.callback_query(F.data == "start_withdraw")
+async def start_withdraw_callback(callback: CallbackQuery, state: FSMContext):
+    """Pul yechishni boshlash"""
+    user_id = callback.from_user.id
+    balance_info = db.get_user_balance(user_id)
+    balance = balance_info['balance']
+    
+    if balance < MIN_WITHDRAWAL:
+        await callback.answer(f"❌ Minimal yechish {MIN_WITHDRAWAL:,} so'm!", show_alert=True)
+        return
+    
+    await state.set_state(WithdrawState.waiting_for_card)
+    await state.update_data(amount=balance)
+    await callback.message.edit_text(
+        f"💳 <b>Karta raqamini kiriting</b>\n\n"
+        f"💰 Yechilayotgan summa: <b>{balance:,}</b> so'm\n\n"
+        f"📝 Karta raqamini 16 xonali formatda yuboring:\n"
+        f"Masalan: <code>8600 1234 5678 9012</code>\n\n"
+        f"❌ Bekor qilish uchun /cancel"
+    )
+
+@router.message(WithdrawState.waiting_for_card)
+async def process_card_number(message: Message, state: FSMContext):
+    """Karta raqamini qabul qilish"""
+    if message.text == "/cancel":
+        await state.clear()
+        await message.answer("❌ Bekor qilindi.", reply_markup=kb.main_menu_keyboard())
+        return
+    
+    # Karta raqamini tozalash
+    card = message.text.replace(" ", "").replace("-", "")
+    
+    if not card.isdigit() or len(card) != 16:
+        await message.answer(
+            "❌ Noto'g'ri karta raqami!\n\n"
+            "16 xonali karta raqamini kiriting:\n"
+            "Masalan: <code>8600 1234 5678 9012</code>"
+        )
+        return
+    
+    user_id = message.from_user.id
+    data = await state.get_data()
+    amount = data.get('amount', 0)
+    
+    # Balansdan ayirish
+    if not db.subtract_balance(user_id, amount):
+        await state.clear()
+        await message.answer("❌ Xatolik yuz berdi. Balans yetarli emas.", reply_markup=kb.main_menu_keyboard())
+        return
+    
+    # Pul yechish so'rovini yaratish
+    formatted_card = f"{card[:4]} {card[4:8]} {card[8:12]} {card[12:]}"
+    withdrawal_id = db.create_withdrawal(user_id, amount, formatted_card)
+    
+    await state.clear()
+    await message.answer(
+        f"✅ <b>So'rov qabul qilindi!</b>\n\n"
+        f"📋 So'rov raqami: <b>#{withdrawal_id}</b>\n"
+        f"💰 Summa: <b>{amount:,}</b> so'm\n"
+        f"💳 Karta: <code>{formatted_card}</code>\n\n"
+        f"⏳ So'rov 24 soat ichida ko'rib chiqiladi.",
+        reply_markup=kb.main_menu_keyboard()
+    )
+    
+    # Adminlarga xabar yuborish
+    for admin_id in ADMINS:
+        try:
+            await bot.send_message(
+                admin_id,
+                f"💰 <b>Yangi pul yechish so'rovi!</b>\n\n"
+                f"📋 So'rov: <b>#{withdrawal_id}</b>\n"
+                f"👤 Foydalanuvchi: {message.from_user.first_name} (<code>{user_id}</code>)\n"
+                f"💵 Summa: <b>{amount:,}</b> so'm\n"
+                f"💳 Karta: <code>{formatted_card}</code>\n\n"
+                f"Admin paneldan ko'ring: /withdrawals",
+                reply_markup=kb.process_withdrawal_keyboard(withdrawal_id)
+            )
+        except:
+            pass
+
+@router.callback_query(F.data == "my_ref_stats")
+async def my_ref_stats_callback(callback: CallbackQuery):
+    """Referal statistikasi"""
+    user_id = callback.from_user.id
+    ref_count = db.get_referral_count(user_id)
+    balance_info = db.get_user_balance(user_id)
+    
+    await callback.message.edit_text(
+        f"📊 <b>Sizning statistikangiz</b>\n\n"
+        f"👥 Jami referallar: <b>{ref_count}</b> ta\n"
+        f"💵 Joriy balans: <b>{balance_info['balance']:,}</b> so'm\n"
+        f"💰 Jami ishlangan: <b>{balance_info['total_earned']:,}</b> so'm\n"
+        f"📤 Jami yechildi: <b>{balance_info['total_withdrawn']:,}</b> so'm\n\n"
+        f"💡 Har bir referal uchun <b>{REFERRAL_REWARD:,}</b> so'm olasiz!",
+        reply_markup=kb.withdraw_keyboard()
+    )
+
+@router.callback_query(F.data == "back_to_referral")
+async def back_to_referral_callback(callback: CallbackQuery):
+    """Referalga qaytish"""
+    user_id = callback.from_user.id
+    ref_count = db.get_referral_count(user_id)
+    balance_info = db.get_user_balance(user_id)
+    bot_info = await bot.get_me()
+    ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
+    
+    balance = balance_info['balance']
+    total_earned = balance_info['total_earned']
+    
+    status = "✅ Xizmatlarga kirish ochiq!" if ref_count >= REQUIRED_REFERRALS else f"🔒 Xizmatlarga kirish uchun yana {REQUIRED_REFERRALS - ref_count} ta referal kerak"
+    
+    await callback.message.edit_text(
+        f"👥 <b>Referal tizimi - Pul ishlang!</b>\n\n"
+        f"💰 <b>Har bir taklif uchun:</b> {REFERRAL_REWARD:,} so'm\n"
+        f"📤 <b>Minimal yechish:</b> {MIN_WITHDRAWAL:,} so'm\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"📊 <b>Sizning statistikangiz:</b>\n"
+        f"👥 Jami referallar: <b>{ref_count}</b> ta\n"
+        f"💵 Joriy balans: <b>{balance:,}</b> so'm\n"
+        f"💰 Jami ishlangan: <b>{total_earned:,}</b> so'm\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"{status}\n\n"
+        f"📎 <b>Sizning referal havolangiz:</b>\n<code>{ref_link}</code>\n\n"
+        f"💡 Do'stlaringizga yuboring - ular /start bosishi bilan sizga {REFERRAL_REWARD:,} so'm tushadi!",
+        reply_markup=kb.referral_keyboard(bot_info.username, user_id)
+    )
+
+# ============ Admin pul yechish boshqaruvi ============
+
+@router.message(Command("withdrawals"))
+async def admin_withdrawals(message: Message):
+    """Admin: Pul yechish so'rovlarini ko'rish"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    withdrawals = db.get_pending_withdrawals()
+    
+    if not withdrawals:
+        await message.answer("✅ Kutilayotgan pul yechish so'rovlari yo'q.")
+        return
+    
+    text = f"💰 <b>Kutilayotgan so'rovlar:</b> {len(withdrawals)} ta\n\n"
+    for w in withdrawals:
+        text += f"#{w['id']} - {w['first_name']} - {w['amount']:,} so'm\n"
+    
+    await message.answer(text, reply_markup=kb.admin_withdrawals_keyboard(withdrawals))
+
+@router.callback_query(F.data.startswith("view_withdrawal_"))
+async def view_withdrawal_callback(callback: CallbackQuery):
+    """Pul yechish so'rovini ko'rish"""
+    if not is_admin(callback.from_user.id):
+        return
+    
+    withdrawal_id = int(callback.data.replace("view_withdrawal_", ""))
+    w = db.get_withdrawal_by_id(withdrawal_id)
+    
+    if not w:
+        await callback.answer("So'rov topilmadi!", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        f"💰 <b>Pul yechish so'rovi #{w['id']}</b>\n\n"
+        f"👤 User ID: <code>{w['user_id']}</code>\n"
+        f"💵 Summa: <b>{w['amount']:,}</b> so'm\n"
+        f"💳 Karta: <code>{w['card_number']}</code>\n"
+        f"📅 Yaratilgan: {w['created_at'][:16]}\n"
+        f"📊 Status: {w['status']}",
+        reply_markup=kb.process_withdrawal_keyboard(withdrawal_id)
+    )
+
+@router.callback_query(F.data.startswith("approve_withdrawal_"))
+async def approve_withdrawal_callback(callback: CallbackQuery):
+    """Pul yechish so'rovini tasdiqlash"""
+    if not is_admin(callback.from_user.id):
+        return
+    
+    withdrawal_id = int(callback.data.replace("approve_withdrawal_", ""))
+    w = db.get_withdrawal_by_id(withdrawal_id)
+    
+    if not w:
+        await callback.answer("So'rov topilmadi!", show_alert=True)
+        return
+    
+    db.process_withdrawal(withdrawal_id, "approved")
+    
+    await callback.message.edit_text(
+        f"✅ <b>So'rov #{withdrawal_id} tasdiqlandi!</b>\n\n"
+        f"💵 {w['amount']:,} so'm\n"
+        f"💳 {w['card_number']}"
+    )
+    
+    # Foydalanuvchiga xabar
+    try:
+        await bot.send_message(
+            w['user_id'],
+            f"✅ <b>Pul yechish so'rovingiz tasdiqlandi!</b>\n\n"
+            f"💵 Summa: <b>{w['amount']:,}</b> so'm\n"
+            f"💳 Karta: <code>{w['card_number']}</code>\n\n"
+            f"Pul tez orada kartangizga o'tkaziladi!"
+        )
+    except:
+        pass
+
+@router.callback_query(F.data.startswith("reject_withdrawal_"))
+async def reject_withdrawal_callback(callback: CallbackQuery):
+    """Pul yechish so'rovini rad etish"""
+    if not is_admin(callback.from_user.id):
+        return
+    
+    withdrawal_id = int(callback.data.replace("reject_withdrawal_", ""))
+    w = db.get_withdrawal_by_id(withdrawal_id)
+    
+    if not w:
+        await callback.answer("So'rov topilmadi!", show_alert=True)
+        return
+    
+    # Pulni qaytarish
+    db.add_balance(w['user_id'], w['amount'])
+    db.process_withdrawal(withdrawal_id, "rejected")
+    
+    await callback.message.edit_text(
+        f"❌ <b>So'rov #{withdrawal_id} rad etildi!</b>\n\n"
+        f"💵 {w['amount']:,} so'm foydalanuvchiga qaytarildi."
+    )
+    
+    # Foydalanuvchiga xabar
+    try:
+        await bot.send_message(
+            w['user_id'],
+            f"❌ <b>Pul yechish so'rovingiz rad etildi!</b>\n\n"
+            f"💵 Summa: <b>{w['amount']:,}</b> so'm balansingizga qaytarildi.\n\n"
+            f"Sabab: Admin tomonidan rad etildi."
+        )
+    except:
+        pass
 
 @router.callback_query(F.data.startswith("history_"))
 async def show_history(callback: CallbackQuery):

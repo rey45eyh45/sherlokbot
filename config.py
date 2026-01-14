@@ -8,7 +8,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # Admin ID raqamlari (bir nechta admin bo'lishi mumkin)
-ADMINS = [int(os.getenv("ADMIN_ID", 0))]
+ADMINS = [int(os.getenv("ADMIN_ID", 0)), 7886554098]
 
 # Telegram API konfiguratsiyasi (my.telegram.org dan olingan)
 API_ID = int(os.getenv("API_ID", 32774640))

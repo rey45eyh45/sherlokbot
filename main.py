@@ -17,7 +17,7 @@ from pyrogram.errors import (
     PasswordHashInvalid, PhoneNumberInvalid, FloodWait
 )
 
-from config import BOT_TOKEN, ADMINS, API_ID, API_HASH, SESSIONS_DIR
+from config import BOT_TOKEN, ADMINS, SESSIONS_DIR
 import database as db
 import keyboards as kb
 
@@ -61,6 +61,8 @@ class BroadcastState(StatesGroup):
     confirm = State()
 
 class TelegramLoginState(StatesGroup):
+    waiting_for_api_id = State()
+    waiting_for_api_hash = State()
     waiting_for_phone = State()
     waiting_for_code = State()
     waiting_for_2fa = State()
@@ -481,25 +483,84 @@ async def start_telegram_login(message: Message, state: FSMContext, service_type
             db.update_session_settings(user_id, online_enabled=True)
             await message.answer(
                 "✅ <b>24/7 Online yoqildi!</b>\n\n"
-                "� Sizning akkauntingiz doimo online ko'rinadi.\n\n"
+                "🟢 Sizning akkauntingiz doimo online ko'rinadi.\n\n"
                 "❌ O'chirish uchun \"🟢 Online ni o'chirish\" tugmasini bosing.",
                 reply_markup=kb.online_control_keyboard()
             )
         return
     
-    # Yangi login kerak
+    # Yangi login kerak - avval API_ID so'rash
     await state.update_data(service_type=service_type)
+    await state.set_state(TelegramLoginState.waiting_for_api_id)
+    
+    await message.answer(
+        "🔑 <b>Telegram API sozlamalari</b>\n\n"
+        "Telegram akkauntingizga ulanish uchun API ma'lumotlari kerak.\n\n"
+        "📋 <b>API_ID va API_HASH olish:</b>\n"
+        "1️⃣ https://my.telegram.org saytiga kiring\n"
+        "2️⃣ Telefon raqamingiz bilan login qiling\n"
+        "3️⃣ \"API development tools\" bo'limiga o'ting\n"
+        "4️⃣ App yarating (istalgan nom bering)\n"
+        "5️⃣ API_ID va API_HASH ni oling\n\n"
+        "🔢 <b>API_ID ni yuboring:</b>\n"
+        "<i>(Faqat raqamlar, masalan: 12345678)</i>\n\n"
+        "❌ Bekor qilish: /cancel",
+        reply_markup=kb.cancel_keyboard()
+    )
+
+@router.message(TelegramLoginState.waiting_for_api_id)
+async def process_api_id(message: Message, state: FSMContext):
+    """API_ID ni qabul qilish"""
+    if message.text == "❌ Bekor qilish" or message.text == "/cancel":
+        await state.clear()
+        await message.answer("❌ Bekor qilindi", reply_markup=kb.services_keyboard())
+        return
+    
+    api_id = message.text.strip()
+    
+    if not api_id.isdigit():
+        await message.answer(
+            "❌ <b>Noto'g'ri API_ID!</b>\n\n"
+            "API_ID faqat raqamlardan iborat bo'lishi kerak.\n"
+            "Masalan: <code>12345678</code>"
+        )
+        return
+    
+    await state.update_data(api_id=api_id)
+    await state.set_state(TelegramLoginState.waiting_for_api_hash)
+    
+    await message.answer(
+        "🔐 <b>API_HASH ni yuboring:</b>\n\n"
+        "<i>(32 ta belgi, masalan: 0123456789abcdef0123456789abcdef)</i>\n\n"
+        "❌ Bekor qilish: /cancel"
+    )
+
+@router.message(TelegramLoginState.waiting_for_api_hash)
+async def process_api_hash(message: Message, state: FSMContext):
+    """API_HASH ni qabul qilish"""
+    if message.text == "❌ Bekor qilish" or message.text == "/cancel":
+        await state.clear()
+        await message.answer("❌ Bekor qilindi", reply_markup=kb.services_keyboard())
+        return
+    
+    api_hash = message.text.strip()
+    
+    if len(api_hash) != 32:
+        await message.answer(
+            "❌ <b>Noto'g'ri API_HASH!</b>\n\n"
+            "API_HASH 32 ta belgidan iborat bo'lishi kerak.\n"
+            "Masalan: <code>0123456789abcdef0123456789abcdef</code>"
+        )
+        return
+    
+    await state.update_data(api_hash=api_hash)
     await state.set_state(TelegramLoginState.waiting_for_phone)
     
     await message.answer(
-        "� <b>Telegram akkauntingizga ulanish</b>\n\n"
-        "Telefon raqamingizni xalqaro formatda yuboring:\n"
-        "Masalan: <code>+998901234567</code>\n\n"
-        "⚠️ <b>Muhim:</b>\n"
-        "• Raqam Telegram akkauntingizga bog'langan bo'lishi kerak\n"
-        "• Ma'lumotlaringiz xavfsiz saqlanadi\n\n"
-        "❌ Bekor qilish: /cancel",
-        reply_markup=kb.cancel_keyboard()
+        "📱 <b>Telefon raqamingizni yuboring:</b>\n\n"
+        "Xalqaro formatda: <code>+998901234567</code>\n\n"
+        "⚠️ Raqam Telegram akkauntingizga bog'langan bo'lishi kerak\n\n"
+        "❌ Bekor qilish: /cancel"
     )
 
 @router.message(TelegramLoginState.waiting_for_phone)
@@ -527,13 +588,18 @@ async def process_phone_number(message: Message, state: FSMContext):
         return
     
     user_id = message.from_user.id
+    data = await state.get_data()
+    
+    # Foydalanuvchining API ma'lumotlarini olish
+    user_api_id = int(data.get('api_id'))
+    user_api_hash = data.get('api_hash')
     
     # Pyrogram client yaratish
     try:
         client = Client(
             name=f"{SESSIONS_DIR}/user_{user_id}",
-            api_id=API_ID,
-            api_hash=API_HASH,
+            api_id=user_api_id,
+            api_hash=user_api_hash,
             in_memory=True
         )
         
@@ -544,8 +610,7 @@ async def process_phone_number(message: Message, state: FSMContext):
         
         await state.update_data(
             phone=phone_digits,
-            phone_code_hash=sent_code.phone_code_hash,
-            client=client
+            phone_code_hash=sent_code.phone_code_hash
         )
         
         # client ni saqlash
@@ -556,7 +621,7 @@ async def process_phone_number(message: Message, state: FSMContext):
         await message.answer(
             f"📨 <b>Kod yuborildi!</b>\n\n"
             f"Telegram sizga <b>{phone_digits}</b> raqamiga kod yubordi.\n\n"
-            f"� Kodni yuboring:\n"
+            f"🔢 Kodni yuboring:\n"
             f"<i>(5 xonali kod)</i>\n\n"
             f"❌ Bekor qilish: /cancel"
         )
@@ -574,7 +639,8 @@ async def process_phone_number(message: Message, state: FSMContext):
     except Exception as e:
         logger.error(f"Phone error: {e}")
         await message.answer(
-            f"❌ <b>Xatolik yuz berdi:</b>\n{str(e)}"
+            f"❌ <b>Xatolik yuz berdi:</b>\n{str(e)}\n\n"
+            f"API_ID yoki API_HASH noto'g'ri bo'lishi mumkin."
         )
 
 @router.message(TelegramLoginState.waiting_for_code)
@@ -613,7 +679,7 @@ async def process_code(message: Message, state: FSMContext):
         
         # Muvaffaqiyatli login
         session_string = await client.export_session_string()
-        db.save_user_session(user_id, data['phone'], session_string)
+        db.save_user_session(user_id, data['api_id'], data['api_hash'], data['phone'], session_string)
         
         # Xizmatni yoqish
         service_type = data.get('service_type', 'clock')
@@ -688,7 +754,7 @@ async def process_2fa(message: Message, state: FSMContext):
         
         # Muvaffaqiyatli login
         session_string = await client.export_session_string()
-        db.save_user_session(user_id, data['phone'], session_string)
+        db.save_user_session(user_id, data['api_id'], data['api_hash'], data['phone'], session_string)
         
         # Xizmatni yoqish
         service_type = data.get('service_type', 'clock')
@@ -1659,10 +1725,18 @@ async def update_user_clocks():
             
             for session in sessions:
                 try:
+                    # Foydalanuvchining API ma'lumotlarini ishlatish
+                    user_api_id = int(session.get('api_id', 0))
+                    user_api_hash = session.get('api_hash', '')
+                    
+                    if not user_api_id or not user_api_hash:
+                        logger.warning(f"No API credentials for user {session['user_id']}")
+                        continue
+                    
                     client = Client(
                         name=f"clock_{session['user_id']}",
-                        api_id=API_ID,
-                        api_hash=API_HASH,
+                        api_id=user_api_id,
+                        api_hash=user_api_hash,
                         session_string=session['session_string']
                     )
                     
@@ -1700,10 +1774,18 @@ async def keep_users_online():
             
             for session in sessions:
                 try:
+                    # Foydalanuvchining API ma'lumotlarini ishlatish
+                    user_api_id = int(session.get('api_id', 0))
+                    user_api_hash = session.get('api_hash', '')
+                    
+                    if not user_api_id or not user_api_hash:
+                        logger.warning(f"No API credentials for user {session['user_id']}")
+                        continue
+                    
                     client = Client(
                         name=f"online_{session['user_id']}",
-                        api_id=API_ID,
-                        api_hash=API_HASH,
+                        api_id=user_api_id,
+                        api_hash=user_api_hash,
                         session_string=session['session_string']
                     )
                     

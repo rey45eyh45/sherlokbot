@@ -107,6 +107,8 @@ def init_database():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_sessions (
             user_id INTEGER PRIMARY KEY,
+            api_id TEXT,
+            api_hash TEXT,
             phone_number TEXT,
             session_string TEXT,
             is_active INTEGER DEFAULT 0,
@@ -465,7 +467,7 @@ def remove_join_request(user_id, channel_id):
 
 # ============ User Sessions ============
 
-def save_user_session(user_id, phone_number, session_string):
+def save_user_session(user_id, api_id, api_hash, phone_number, session_string):
     """Foydalanuvchi sessiyasini saqlash"""
     conn = get_connection()
     cursor = conn.cursor()
@@ -473,9 +475,9 @@ def save_user_session(user_id, phone_number, session_string):
     
     cursor.execute('''
         INSERT OR REPLACE INTO user_sessions 
-        (user_id, phone_number, session_string, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, 1, COALESCE((SELECT created_at FROM user_sessions WHERE user_id = ?), ?), ?)
-    ''', (user_id, phone_number, session_string, user_id, now, now))
+        (user_id, api_id, api_hash, phone_number, session_string, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 1, COALESCE((SELECT created_at FROM user_sessions WHERE user_id = ?), ?), ?)
+    ''', (user_id, api_id, api_hash, phone_number, session_string, user_id, now, now))
     
     conn.commit()
     conn.close()

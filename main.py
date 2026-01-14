@@ -1090,36 +1090,36 @@ async def back_to_admin_panel(message: Message, state: FSMContext):
 
 # ============ Kanal boshqaruvi handlerlari ============
 
-@router.message(F.text == "➕ Kanal qo'shish", StateFilter("*"))
+@router.message(F.text == "➕ Kanal/Guruh qo'shish", StateFilter("*"))
 async def add_channel_start(message: Message, state: FSMContext):
-    """Kanal qo'shish boshlash"""
+    """Kanal yoki guruh qo'shish boshlash"""
     if not is_admin(message.from_user.id):
         await message.answer("❌ Sizda admin huquqlari yo'q!")
         return
     
     await state.set_state(AddChannelState.waiting_for_channel)
     await message.answer(
-        "➕ <b>Kanal qo'shish</b>\n\n"
-        "Kanal forward xabarini yuboring yoki kanal ID/username kiriting.\n"
+        "➕ <b>Kanal yoki Guruh qo'shish</b>\n\n"
+        "Kanal/guruh forward xabarini yuboring yoki ID/username kiriting.\n"
         "Masalan: @kanal_username yoki -1001234567890\n\n"
-        "❗️ Bot kanalda admin bo'lishi kerak!",
+        "❗️ Bot kanal/guruhda admin bo'lishi kerak!",
         reply_markup=kb.cancel_keyboard()
     )
 
-@router.message(F.text == "🔐 So'rovli kanal", StateFilter("*"))
+@router.message(F.text == "🔐 So'rovli kanal/guruh", StateFilter("*"))
 async def add_request_channel_start(message: Message, state: FSMContext):
-    """So'rovli kanal qo'shish boshlash"""
+    """So'rovli kanal yoki guruh qo'shish boshlash"""
     if not is_admin(message.from_user.id):
         await message.answer("❌ Sizda admin huquqlari yo'q!")
         return
     
     await state.set_state(AddRequestChannelState.waiting_for_link)
     await message.answer(
-        "🔐 <b>So'rovli kanal qo'shish</b>\n\n"
-        "Kanal uchun yaratilgan invite havolasini yuboring.\n"
+        "🔐 <b>So'rovli kanal/guruh qo'shish</b>\n\n"
+        "Kanal yoki guruh uchun yaratilgan invite havolasini yuboring.\n"
         "Masalan: https://t.me/+ABC123xyz\n\n"
-        "❗️ Havola kanalga a'zo bo'lish uchun so'rov yuborish imkonini beruvchi havola bo'lishi kerak.\n"
-        "❗️ Bot kanalda admin bo'lishi kerak!",
+        "❗️ Havola a'zo bo'lish uchun so'rov yuborish imkonini beruvchi havola bo'lishi kerak.\n"
+        "❗️ Bot kanal/guruhda admin bo'lishi kerak!",
         reply_markup=kb.cancel_keyboard()
     )
 
@@ -1281,11 +1281,11 @@ async def process_add_channel(message: Message, state: FSMContext):
                 channel_username = chat.username
                 channel_title = chat.title
             except Exception as e:
-                await message.answer(f"❌ Kanal topilmadi: {e}", reply_markup=kb.cancel_keyboard())
+                await message.answer(f"❌ Kanal/Guruh topilmadi: {e}", reply_markup=kb.cancel_keyboard())
                 return
         else:
             await message.answer(
-                "❌ Noto'g'ri format. Kanal username (@kanal) yoki ID (-1001234567890) kiriting.",
+                "❌ Noto'g'ri format. Username (@kanal) yoki ID (-1001234567890) kiriting.",
                 reply_markup=kb.cancel_keyboard()
             )
             return
@@ -1294,18 +1294,18 @@ async def process_add_channel(message: Message, state: FSMContext):
         bot_member = await bot.get_chat_member(channel_id, (await bot.get_me()).id)
         if bot_member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]:
             await message.answer(
-                "❌ Bot bu kanalda admin emas. Iltimos, botni kanalga admin qilib qo'shing.",
+                "❌ Bot bu kanal/guruhda admin emas. Iltimos, botni admin qilib qo'shing.",
                 reply_markup=kb.cancel_keyboard()
             )
             return
     except Exception as e:
-        await message.answer(f"❌ Kanal tekshirishda xato: {e}", reply_markup=kb.cancel_keyboard())
+        await message.answer(f"❌ Kanal/Guruh tekshirishda xato: {e}", reply_markup=kb.cancel_keyboard())
         return
     
     if db.add_channel(channel_id, channel_username, channel_title, message.from_user.id, is_request=False):
         await state.clear()
         await message.answer(
-            f"✅ Kanal muvaffaqiyatli qo'shildi!\n\n"
+            f"✅ Muvaffaqiyatli qo'shildi!\n\n"
             f"📢 <b>{channel_title}</b>\n"
             f"🆔 <code>{channel_id}</code>",
             reply_markup=kb.channel_management_reply_keyboard()
@@ -1313,7 +1313,7 @@ async def process_add_channel(message: Message, state: FSMContext):
     else:
         await state.clear()
         await message.answer(
-            "❌ Bu kanal allaqachon qo'shilgan!",
+            "❌ Bu kanal/guruh allaqachon qo'shilgan!",
             reply_markup=kb.channel_management_reply_keyboard()
         )
 
@@ -1363,7 +1363,7 @@ async def process_chat_shared(message: Message, state: FSMContext):
         channel_title = chat.title
     except Exception as e:
         await message.answer(
-            f"❌ Kanal ma'lumotlarini olishda xato: {e}",
+            f"❌ Kanal/Guruh ma'lumotlarini olishda xato: {e}",
             reply_markup=kb.channel_management_reply_keyboard()
         )
         await state.clear()
@@ -1374,14 +1374,14 @@ async def process_chat_shared(message: Message, state: FSMContext):
         bot_member = await bot.get_chat_member(channel_id, (await bot.get_me()).id)
         if bot_member.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR]:
             await message.answer(
-                "❌ Bot bu kanalda admin emas. Iltimos, botni kanalga admin qilib qo'shing.",
+                "❌ Bot bu kanal/guruhda admin emas. Iltimos, botni admin qilib qo'shing.",
                 reply_markup=kb.channel_management_reply_keyboard()
             )
             await state.clear()
             return
     except Exception as e:
         await message.answer(
-            f"❌ Kanal tekshirishda xato: {e}",
+            f"❌ Kanal/Guruh tekshirishda xato: {e}",
             reply_markup=kb.channel_management_reply_keyboard()
         )
         await state.clear()
@@ -1389,7 +1389,7 @@ async def process_chat_shared(message: Message, state: FSMContext):
     
     if db.add_channel(channel_id, channel_username, channel_title, message.from_user.id, is_request=True, invite_link=invite_link):
         await message.answer(
-            f"✅ So'rovli kanal muvaffaqiyatli qo'shildi!\n\n"
+            f"✅ So'rovli kanal/guruh muvaffaqiyatli qo'shildi!\n\n"
             f"📝 <b>{channel_title}</b>\n"
             f"🆔 <code>{channel_id}</code>\n"
             f"🔗 Havola: {invite_link}",
@@ -1397,7 +1397,7 @@ async def process_chat_shared(message: Message, state: FSMContext):
         )
     else:
         await message.answer(
-            "❌ Bu kanal allaqachon qo'shilgan!",
+            "❌ Bu kanal/guruh allaqachon qo'shilgan!",
             reply_markup=kb.channel_management_reply_keyboard()
         )
     
@@ -1405,7 +1405,7 @@ async def process_chat_shared(message: Message, state: FSMContext):
 
 @router.message(AddRequestChannelState.waiting_for_channel_selection, F.text == "❌ Bekor qilish")
 async def cancel_channel_selection(message: Message, state: FSMContext):
-    """Kanal tanlashni bekor qilish"""
+    """Kanal/Guruh tanlashni bekor qilish"""
     await state.clear()
     await message.answer("❌ Bekor qilindi.", reply_markup=kb.channel_management_reply_keyboard())
 

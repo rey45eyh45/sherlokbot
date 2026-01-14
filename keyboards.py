@@ -61,7 +61,7 @@ def backup_keyboard(auto_backup_enabled=False):
 def channel_management_reply_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="➕ Kanal qo'shish"), KeyboardButton(text="🔐 So'rovli kanal")],
+            [KeyboardButton(text="➕ Kanal/Guruh qo'shish"), KeyboardButton(text="🔐 So'rovli kanal/guruh")],
             [KeyboardButton(text="🤖 Bot qo'shish"), KeyboardButton(text="🗑 Kanal o'chirish")],
             [KeyboardButton(text="📋 Kanallar ro'yxati")],
             [KeyboardButton(text="⬅️ Admin panelga qaytish")]
@@ -114,8 +114,12 @@ def check_subscription_keyboard(channels):
         is_bot = channel.get('is_bot', 0)
         invite_link = channel.get('invite_link', '')
         title = channel.get('channel_title', username)
+        channel_id = channel.get('channel_id', 0)
         url = None
-        button_text = "➕ Kanalga obuna bo'lish"
+        button_text = "➕ Obuna bo'lish"
+        
+        # Kanal yoki guruh ekanligini aniqlash (guruh ID lar -100 dan boshlanadi va kanal emas)
+        is_group = str(channel_id).startswith('-100') and not is_bot
         
         if is_bot:
             # Bot uchun
@@ -126,13 +130,13 @@ def check_subscription_keyboard(channels):
                 url = invite_link
             elif username:
                 url = f"https://t.me/{username.replace('@', '')}"
-            button_text = f"🔐 {title} kanaliga so'rov yuborish"
+            button_text = f"🔐 {title} ga so'rov yuborish"
         else:
             if username:
                 url = f"https://t.me/{username.replace('@', '')}"
             elif invite_link:
                 url = invite_link
-            button_text = f"➕ {title} kanaliga obuna bo'lish"
+            button_text = f"➕ {title} ga obuna bo'lish"
         
         if url:
             buttons.append([InlineKeyboardButton(text=button_text, url=url)])

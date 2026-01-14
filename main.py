@@ -363,8 +363,8 @@ async def show_support(message: Message, state: FSMContext):
     await message.answer(
         "🆘 <b>Qo'llab-quvvatlash</b>\n\n"
         "Savollaringiz yoki muammolaringiz bo'lsa, bizga murojaat qiling:\n\n"
-        "📩 Admin: @admin_username\n"
-        "💬 Guruh: @support_group",
+        "� Kanal: @daromatx\n"
+        "� Admin: @daromatx_admin",
         reply_markup=kb.main_menu_keyboard()
     )
 

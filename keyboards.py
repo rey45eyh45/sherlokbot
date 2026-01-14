@@ -113,30 +113,24 @@ def check_subscription_keyboard(channels):
         is_request = channel.get('is_request_channel', 0)
         is_bot = channel.get('is_bot', 0)
         invite_link = channel.get('invite_link', '')
-        title = channel.get('channel_title', username)
-        channel_id = channel.get('channel_id', 0)
         url = None
-        button_text = "➕ Obuna bo'lish"
-        
-        # Kanal yoki guruh ekanligini aniqlash (guruh ID lar -100 dan boshlanadi va kanal emas)
-        is_group = str(channel_id).startswith('-100') and not is_bot
         
         if is_bot:
             # Bot uchun
             url = f"https://t.me/{username.replace('@', '')}?start=check"
-            button_text = f"🤖 {title} botni ishga tushirish"
+            button_text = "🤖 Botni ishga tushirish"
         elif is_request:
             if invite_link:
                 url = invite_link
             elif username:
                 url = f"https://t.me/{username.replace('@', '')}"
-            button_text = f"🔐 {title} ga so'rov yuborish"
+            button_text = "➕ Kanalga obuna bo'lish"
         else:
             if username:
                 url = f"https://t.me/{username.replace('@', '')}"
             elif invite_link:
                 url = invite_link
-            button_text = f"➕ {title} ga obuna bo'lish"
+            button_text = "➕ Kanalga obuna bo'lish"
         
         if url:
             buttons.append([InlineKeyboardButton(text=button_text, url=url)])

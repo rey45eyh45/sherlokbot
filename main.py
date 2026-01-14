@@ -144,10 +144,8 @@ async def check_user_subscription(user_id):
         
         try:
             if is_bot:
-                # Bot - ishga tushirilganini tekshirish
-                bot_username = channel.get('channel_username', '')
-                if not db.has_bot_started(user_id, bot_username):
-                    return False
+                # Bot - faqat ro'yxatda ko'rsatiladi, tekshirilmaydi
+                continue
             elif is_request_channel:
                 if db.has_join_request(user_id, channel_id):
                     continue
@@ -172,6 +170,8 @@ async def require_subscription(message: Message):
     
     # Faqat obuna bo'lmagan kanallarni topish
     not_subscribed_channels = []
+    # Botlar ro'yxati (faqat ko'rsatish uchun)
+    bot_channels = []
     user_id = message.from_user.id
     
     for channel in channels:
@@ -181,10 +181,8 @@ async def require_subscription(message: Message):
         
         try:
             if is_bot:
-                # Bot - ishga tushirilganini tekshirish
-                bot_username = channel.get('channel_username', '')
-                if not db.has_bot_started(user_id, bot_username):
-                    not_subscribed_channels.append(channel)
+                # Bot - faqat ro'yxatda ko'rsatish uchun, majburiy emas
+                bot_channels.append(channel)
             elif is_request_channel:
                 # So'rovli kanal - join request borligini tekshirish
                 if not db.has_join_request(user_id, channel_id):
@@ -200,8 +198,10 @@ async def require_subscription(message: Message):
             not_subscribed_channels.append(channel)
     
     if not_subscribed_channels:
+        # Majburiy kanallar + botlar (ko'rsatish uchun)
+        all_channels = not_subscribed_channels + bot_channels
         text = "📢 <b>Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:</b>"
-        await message.answer(text, reply_markup=kb.check_subscription_keyboard(not_subscribed_channels))
+        await message.answer(text, reply_markup=kb.check_subscription_keyboard(all_channels))
         return False
     
     return True

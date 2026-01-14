@@ -2,6 +2,7 @@ import logging
 import re
 import asyncio
 import os
+import hashlib
 from datetime import datetime
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.filters import Command, StateFilter
@@ -1156,41 +1157,29 @@ async def process_add_bot(message: Message, state: FSMContext):
         )
         return
     
-    # Bot mavjudligini tekshirish
-    try:
-        bot_info = await bot.get_chat(f"@{username}")
-        
-        if bot_info.type != ChatType.PRIVATE:
-            await message.answer("❌ Bu bot emas!")
-            return
-        
-        # Bazaga qo'shish
-        if db.add_channel(
-            channel_id=bot_info.id,
-            channel_username=username,
-            channel_title=bot_info.first_name or username,
-            added_by=message.from_user.id,
-            invite_link=f"https://t.me/{username}",
-            is_bot=True
-        ):
-            await message.answer(
-                f"✅ <b>Bot muvaffaqiyatli qo'shildi!</b>\n\n"
-                f"🤖 Bot: @{username}\n"
-                f"📛 Nomi: {bot_info.first_name or username}\n\n"
-                f"Endi foydalanuvchilar ushbu botni ishga tushirishlari kerak bo'ladi.",
-                reply_markup=kb.channel_management_reply_keyboard()
-            )
-        else:
-            await message.answer(
-                "❌ Bu bot allaqachon qo'shilgan!",
-                reply_markup=kb.channel_management_reply_keyboard()
-            )
-            
-    except Exception as e:
-        logger.error(f"Bot qo'shishda xato: {e}")
+    # Bot username "bot" bilan tugashini tekshirdik, endi bazaga qo'shamiz
+    # Bot ID sifatida username dan hash qilamiz (bot ID ni olish imkoni yo'q)
+    # Unique ID uchun username dan foydalanmiz
+    bot_id = int(hashlib.md5(username.encode()).hexdigest()[:8], 16)
+    
+    # Bazaga qo'shish
+    if db.add_channel(
+        channel_id=bot_id,
+        channel_username=username,
+        channel_title=f"@{username}",
+        added_by=message.from_user.id,
+        invite_link=f"https://t.me/{username}",
+        is_bot=True
+    ):
         await message.answer(
-            f"❌ <b>Bot topilmadi!</b>\n\n"
-            f"@{username} mavjud emasligiga ishonch hosil qiling.",
+            f"✅ <b>Bot muvaffaqiyatli qo'shildi!</b>\n\n"
+            f"🤖 Bot: @{username}\n\n"
+            f"❗️ Endi foydalanuvchilar ushbu botni /start qilishlari kerak bo'ladi.",
+            reply_markup=kb.channel_management_reply_keyboard()
+        )
+    else:
+        await message.answer(
+            "❌ Bu bot allaqachon qo'shilgan!",
             reply_markup=kb.channel_management_reply_keyboard()
         )
     

@@ -52,6 +52,7 @@ def init_database():
             invite_link TEXT,
             is_active INTEGER DEFAULT 1,
             is_request_channel INTEGER DEFAULT 0,
+            is_bot INTEGER DEFAULT 0,
             added_at TEXT,
             added_by INTEGER
         )
@@ -113,6 +114,17 @@ def init_database():
             clock_enabled INTEGER DEFAULT 0,
             created_at TEXT,
             updated_at TEXT
+        )
+    ''')
+    
+    # Bot ishga tushirilgan foydalanuvchilar
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS bot_started (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            bot_username TEXT,
+            started_at TEXT,
+            UNIQUE(user_id, bot_username)
         )
     ''')
     
@@ -351,7 +363,7 @@ def get_user_groups(user_id):
 
 # ============ Kanallar bilan ishlash ============
 
-def add_channel(channel_id, channel_username, channel_title, added_by, is_request=False, invite_link=None):
+def add_channel(channel_id, channel_username, channel_title, added_by, is_request=False, invite_link=None, is_bot=False):
     """Kanal qo'shish"""
     conn = get_connection()
     cursor = conn.cursor()
@@ -359,9 +371,9 @@ def add_channel(channel_id, channel_username, channel_title, added_by, is_reques
     
     try:
         cursor.execute('''
-            INSERT INTO channels (channel_id, channel_username, channel_title, invite_link, is_active, is_request_channel, added_at, added_by)
-            VALUES (?, ?, ?, ?, 1, ?, ?, ?)
-        ''', (str(channel_id), channel_username or '', channel_title or '', invite_link or '', 1 if is_request else 0, now, added_by))
+            INSERT INTO channels (channel_id, channel_username, channel_title, invite_link, is_active, is_request_channel, is_bot, added_at, added_by)
+            VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+        ''', (str(channel_id), channel_username or '', channel_title or '', invite_link or '', 1 if is_request else 0, 1 if is_bot else 0, now, added_by))
         conn.commit()
         result = True
     except sqlite3.IntegrityError:
@@ -519,6 +531,48 @@ def get_active_clock_sessions():
     results = cursor.fetchall()
     conn.close()
     return [dict(r) for r in results]
+
+# ============ Bot Started ============
+
+def add_bot_started(user_id, bot_username):
+    """Foydalanuvchi botni ishga tushirganini saqlash"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    
+    try:
+        cursor.execute('''
+            INSERT OR IGNORE INTO bot_started (user_id, bot_username, started_at)
+            VALUES (?, ?, ?)
+        ''', (user_id, bot_username.lower(), now))
+        conn.commit()
+        result = True
+    except:
+        result = False
+    
+    conn.close()
+    return result
+
+def has_bot_started(user_id, bot_username):
+    """Foydalanuvchi botni ishga tushirganini tekshirish"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM bot_started WHERE user_id = ? AND bot_username = ?
+    ''', (user_id, bot_username.lower()))
+    result = cursor.fetchone()
+    conn.close()
+    return result is not None
+
+def remove_bot_started(user_id, bot_username):
+    """Bot started yozuvini o'chirish"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        DELETE FROM bot_started WHERE user_id = ? AND bot_username = ?
+    ''', (user_id, bot_username.lower()))
+    conn.commit()
+    conn.close()
 
 # Database ni ishga tushirish
 if __name__ == "__main__":

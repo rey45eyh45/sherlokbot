@@ -66,6 +66,9 @@ class TelegramLoginState(StatesGroup):
     waiting_for_2fa = State()
     service_type = State()  # 'clock' yoki 'online'
 
+class AddBotState(StatesGroup):
+    waiting_for_username = State()
+
 # ============ Yordamchi funksiyalar ============
 
 def is_admin(user_id):
@@ -118,6 +121,12 @@ def estimate_registration_date(user_id):
     
     return datetime.now()
 
+async def check_bot_started(user_id, bot_username):
+    """Foydalanuvchi botni ishga tushirganini tekshirish"""
+    # Bu funksiya foydalanuvchi botni ishga tushirganini tekshiradi
+    # Hozircha bazadagi yozuvni tekshiramiz
+    return db.has_bot_started(user_id, bot_username)
+
 async def check_user_subscription(user_id):
     """Foydalanuvchi barcha kanallarga obuna bo'lganini tekshirish"""
     channels = db.get_active_channels()
@@ -128,9 +137,15 @@ async def check_user_subscription(user_id):
     for channel in channels:
         channel_id = channel['channel_id']
         is_request_channel = channel.get('is_request_channel', 0)
+        is_bot = channel.get('is_bot', 0)
         
         try:
-            if is_request_channel:
+            if is_bot:
+                # Bot - ishga tushirilganini tekshirish
+                bot_username = channel.get('channel_username', '')
+                if not db.has_bot_started(user_id, bot_username):
+                    return False
+            elif is_request_channel:
                 if db.has_join_request(user_id, channel_id):
                     continue
                 else:
@@ -159,9 +174,15 @@ async def require_subscription(message: Message):
     for channel in channels:
         channel_id = channel['channel_id']
         is_request_channel = channel.get('is_request_channel', 0)
+        is_bot = channel.get('is_bot', 0)
         
         try:
-            if is_request_channel:
+            if is_bot:
+                # Bot - ishga tushirilganini tekshirish
+                bot_username = channel.get('channel_username', '')
+                if not db.has_bot_started(user_id, bot_username):
+                    not_subscribed_channels.append(channel)
+            elif is_request_channel:
                 # So'rovli kanal - join request borligini tekshirish
                 if not db.has_join_request(user_id, channel_id):
                     not_subscribed_channels.append(channel)
@@ -1035,6 +1056,80 @@ async def add_request_channel_start(message: Message, state: FSMContext):
         reply_markup=kb.cancel_keyboard()
     )
 
+@router.message(F.text == "🤖 Bot qo'shish", StateFilter("*"))
+async def add_bot_start(message: Message, state: FSMContext):
+    """Bot qo'shish boshlash"""
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ Sizda admin huquqlari yo'q!")
+        return
+    
+    await state.set_state(AddBotState.waiting_for_username)
+    await message.answer(
+        "🤖 <b>Bot qo'shish</b>\n\n"
+        "Majburiy obunaga qo'shmoqchi bo'lgan botning username ini yuboring.\n\n"
+        "Masalan: @mybot yoki mybot\n\n"
+        "❗️ Foydalanuvchilar ushbu botni ishga tushirishlari kerak bo'ladi.",
+        reply_markup=kb.cancel_keyboard()
+    )
+
+@router.message(AddBotState.waiting_for_username)
+async def process_add_bot(message: Message, state: FSMContext):
+    """Bot username ni qabul qilish"""
+    if message.text == "❌ Bekor qilish":
+        await state.clear()
+        await message.answer("❌ Bekor qilindi", reply_markup=kb.channel_management_reply_keyboard())
+        return
+    
+    username = message.text.strip().replace("@", "").lower()
+    
+    if not username.endswith("bot"):
+        await message.answer(
+            "❌ <b>Noto'g'ri bot username!</b>\n\n"
+            "Bot username 'bot' bilan tugashi kerak.\n"
+            "Masalan: @mybot, @helperbot"
+        )
+        return
+    
+    # Bot mavjudligini tekshirish
+    try:
+        bot_info = await bot.get_chat(f"@{username}")
+        
+        if bot_info.type != ChatType.PRIVATE:
+            await message.answer("❌ Bu bot emas!")
+            return
+        
+        # Bazaga qo'shish
+        if db.add_channel(
+            channel_id=bot_info.id,
+            channel_username=username,
+            channel_title=bot_info.first_name or username,
+            added_by=message.from_user.id,
+            invite_link=f"https://t.me/{username}",
+            is_bot=True
+        ):
+            await message.answer(
+                f"✅ <b>Bot muvaffaqiyatli qo'shildi!</b>\n\n"
+                f"🤖 Bot: @{username}\n"
+                f"📛 Nomi: {bot_info.first_name or username}\n\n"
+                f"Endi foydalanuvchilar ushbu botni ishga tushirishlari kerak bo'ladi.",
+                reply_markup=kb.channel_management_reply_keyboard()
+            )
+        else:
+            await message.answer(
+                "❌ Bu bot allaqachon qo'shilgan!",
+                reply_markup=kb.channel_management_reply_keyboard()
+            )
+            
+    except Exception as e:
+        logger.error(f"Bot qo'shishda xato: {e}")
+        await message.answer(
+            f"❌ <b>Bot topilmadi!</b>\n\n"
+            f"@{username} mavjud emasligiga ishonch hosil qiling.",
+            reply_markup=kb.channel_management_reply_keyboard()
+        )
+    
+    await state.clear()
+
 @router.message(F.text == "🗑 Kanal o'chirish", StateFilter("*"))
 async def delete_channel_start(message: Message, state: FSMContext):
     """Kanal o'chirish"""
@@ -1071,9 +1166,22 @@ async def list_channels(message: Message, state: FSMContext):
     text = "📋 <b>Kanallar ro'yxati:</b>\n\n"
     
     for i, channel in enumerate(channels, 1):
-        is_request = "📝" if channel.get('is_request_channel', 0) else "📢"
+        is_bot = channel.get('is_bot', 0)
+        is_request = channel.get('is_request_channel', 0)
+        
+        if is_bot:
+            icon = "🤖"
+            type_text = "Bot"
+        elif is_request:
+            icon = "🔐"
+            type_text = "So'rovli"
+        else:
+            icon = "📢"
+            type_text = "Kanal"
+        
         status = "✅" if channel['is_active'] else "❌"
-        text += f"{i}. {is_request} {status} {channel['channel_title']}\n"
+        text += f"{i}. {icon} {status} {channel['channel_title']}\n"
+        text += f"   Turi: {type_text}\n"
         text += f"   ID: <code>{channel['channel_id']}</code>\n"
         if channel['channel_username']:
             text += f"   Username: @{channel['channel_username']}\n"

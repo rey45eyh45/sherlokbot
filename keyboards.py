@@ -62,7 +62,8 @@ def channel_management_reply_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="➕ Kanal qo'shish"), KeyboardButton(text="🔐 So'rovli kanal")],
-            [KeyboardButton(text="🗑 Kanal o'chirish"), KeyboardButton(text="📋 Kanallar ro'yxati")],
+            [KeyboardButton(text="🤖 Bot qo'shish"), KeyboardButton(text="🗑 Kanal o'chirish")],
+            [KeyboardButton(text="📋 Kanallar ro'yxati")],
             [KeyboardButton(text="⬅️ Admin panelga qaytish")]
         ],
         resize_keyboard=True
@@ -110,20 +111,31 @@ def check_subscription_keyboard(channels):
     for channel in channels:
         username = channel['channel_username']
         is_request = channel.get('is_request_channel', 0)
+        is_bot = channel.get('is_bot', 0)
         invite_link = channel.get('invite_link', '')
+        title = channel.get('channel_title', username)
         url = None
-        if is_request:
+        button_text = "➕ Kanalga obuna bo'lish"
+        
+        if is_bot:
+            # Bot uchun
+            url = f"https://t.me/{username.replace('@', '')}?start=check"
+            button_text = f"🤖 {title} botni ishga tushirish"
+        elif is_request:
             if invite_link:
                 url = invite_link
             elif username:
                 url = f"https://t.me/{username.replace('@', '')}"
+            button_text = f"🔐 {title} kanaliga so'rov yuborish"
         else:
             if username:
                 url = f"https://t.me/{username.replace('@', '')}"
             elif invite_link:
                 url = invite_link
+            button_text = f"➕ {title} kanaliga obuna bo'lish"
+        
         if url:
-            buttons.append([InlineKeyboardButton(text="➕ Kanalga obuna bo'lish", url=url)])
+            buttons.append([InlineKeyboardButton(text=button_text, url=url)])
     buttons.append([InlineKeyboardButton(text="✅ Tekshirish", callback_data="check_subscription")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

@@ -23,7 +23,10 @@ import database as db
 import keyboards as kb
 
 # Logging sozlash
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Sessions papkasini yaratish

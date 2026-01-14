@@ -146,12 +146,11 @@ def check_subscription_keyboard(channels):
 
 def referral_keyboard(bot_username, user_id):
     ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
-    share_text = f"🎁 Bu bot orqali pul ishlang! Har bir taklif uchun 1000 so'm!\n\n{ref_link}"
-    share_url = f"https://t.me/share/url?url={ref_link}&text=🎁 Bu bot orqali pul ishlang! Har bir taklif uchun 1000 so'm!"
+    share_url = f"https://t.me/share/url?url={ref_link}"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📤 Havolani ulashish", url=share_url)],
-        [InlineKeyboardButton(text="� Pul yechish", callback_data="withdraw_money")],
-        [InlineKeyboardButton(text="📊 Mening statistikam", callback_data="my_ref_stats")]
+        [InlineKeyboardButton(text="💰 Pul yechish", callback_data="withdraw_money")],
+        [InlineKeyboardButton(text="📊 Statistika", callback_data="my_ref_stats")]
     ])
     return keyboard
 

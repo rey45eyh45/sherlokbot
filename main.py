@@ -262,7 +262,7 @@ async def cmd_start(message: Message, state: FSMContext):
                         referrer_id, 
                         f"🎉 <b>Yangi referal!</b>\n\n"
                         f"👤 <b>{message.from_user.first_name}</b> sizning havolangiz orqali qo'shildi.\n\n"
-                        f"💰 <b>+{REFERRAL_REWARD:,} so'm</b> balansingizga qo'shildi!\n"
+                        f"� <b>+{REFERRAL_REWARD:,} so'm</b> balansingizga qo'shildi!\n"
                         f"💵 Joriy balans: <b>{balance_info['balance']:,}</b> so'm\n"
                         f"👥 Jami referallar: <b>{ref_count}</b> ta"
                     )
@@ -357,21 +357,23 @@ async def show_referral(message: Message, state: FSMContext):
     balance = balance_info['balance']
     total_earned = balance_info['total_earned']
     
-    status = "✅ Xizmatlarga kirish ochiq!" if ref_count >= REQUIRED_REFERRALS else f"🔒 Xizmatlarga kirish uchun yana {REQUIRED_REFERRALS - ref_count} ta referal kerak"
+    if ref_count >= REQUIRED_REFERRALS:
+        status = "✅ Xizmatlarga kirish ochiq!"
+    else:
+        status = f"🔒 Xizmatlarga kirish uchun yana {REQUIRED_REFERRALS - ref_count} ta referal kerak"
     
     await message.answer(
         f"👥 <b>Referal tizimi - Pul ishlang!</b>\n\n"
-        f"💰 <b>Har bir taklif uchun:</b> {REFERRAL_REWARD:,} so'm\n"
-        f"📤 <b>Minimal yechish:</b> {MIN_WITHDRAWAL:,} so'm\n\n"
+        f"� Har bir taklif uchun: <b>{REFERRAL_REWARD:,}</b> so'm\n"
+        f"📤 Minimal yechish: <b>{MIN_WITHDRAWAL:,}</b> so'm\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"📊 <b>Sizning statistikangiz:</b>\n"
-        f"👥 Jami referallar: <b>{ref_count}</b> ta\n"
-        f"💵 Joriy balans: <b>{balance:,}</b> so'm\n"
+        f"� <b>Sizning statistikangiz:</b>\n"
+        f"👥 Referallar: <b>{ref_count}</b> ta\n"
+        f"� Balans: <b>{balance:,}</b> so'm\n"
         f"💰 Jami ishlangan: <b>{total_earned:,}</b> so'm\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
         f"{status}\n\n"
-        f"📎 <b>Sizning referal havolangiz:</b>\n<code>{ref_link}</code>\n\n"
-        f"💡 Do'stlaringizga yuboring - ular /start bosishi bilan sizga {REFERRAL_REWARD:,} so'm tushadi!",
+        f"📎 <b>Havolangiz:</b>\n<code>{ref_link}</code>",
         reply_markup=kb.referral_keyboard(bot_info.username, user_id)
     )
 
@@ -1627,11 +1629,16 @@ async def withdraw_money_callback(callback: CallbackQuery):
     balance_info = db.get_user_balance(user_id)
     balance = balance_info['balance']
     
+    if balance >= MIN_WITHDRAWAL:
+        status = "✅ Siz pul yechishingiz mumkin!"
+    else:
+        status = f"❌ Pul yechish uchun yana {MIN_WITHDRAWAL - balance:,} so'm kerak"
+    
     await callback.message.edit_text(
         f"💰 <b>Pul yechish</b>\n\n"
         f"💵 Joriy balansingiz: <b>{balance:,}</b> so'm\n"
         f"📤 Minimal yechish: <b>{MIN_WITHDRAWAL:,}</b> so'm\n\n"
-        f"{'✅ Siz pul yechishingiz mumkin!' if balance >= MIN_WITHDRAWAL else f'❌ Pul yechish uchun yana {MIN_WITHDRAWAL - balance:,} som kerak.'}",
+        f"{status}",
         reply_markup=kb.withdraw_keyboard()
     )
 
@@ -1744,21 +1751,23 @@ async def back_to_referral_callback(callback: CallbackQuery):
     balance = balance_info['balance']
     total_earned = balance_info['total_earned']
     
-    status = "✅ Xizmatlarga kirish ochiq!" if ref_count >= REQUIRED_REFERRALS else f"🔒 Xizmatlarga kirish uchun yana {REQUIRED_REFERRALS - ref_count} ta referal kerak"
+    if ref_count >= REQUIRED_REFERRALS:
+        status = "✅ Xizmatlarga kirish ochiq!"
+    else:
+        status = f"🔒 Xizmatlarga kirish uchun yana {REQUIRED_REFERRALS - ref_count} ta referal kerak"
     
     await callback.message.edit_text(
         f"👥 <b>Referal tizimi - Pul ishlang!</b>\n\n"
-        f"💰 <b>Har bir taklif uchun:</b> {REFERRAL_REWARD:,} so'm\n"
-        f"📤 <b>Minimal yechish:</b> {MIN_WITHDRAWAL:,} so'm\n\n"
+        f"💰 Har bir taklif uchun: <b>{REFERRAL_REWARD:,}</b> so'm\n"
+        f"📤 Minimal yechish: <b>{MIN_WITHDRAWAL:,}</b> so'm\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"📊 <b>Sizning statistikangiz:</b>\n"
-        f"👥 Jami referallar: <b>{ref_count}</b> ta\n"
-        f"💵 Joriy balans: <b>{balance:,}</b> so'm\n"
+        f"👥 Referallar: <b>{ref_count}</b> ta\n"
+        f"💵 Balans: <b>{balance:,}</b> so'm\n"
         f"💰 Jami ishlangan: <b>{total_earned:,}</b> so'm\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
         f"{status}\n\n"
-        f"📎 <b>Sizning referal havolangiz:</b>\n<code>{ref_link}</code>\n\n"
-        f"💡 Do'stlaringizga yuboring - ular /start bosishi bilan sizga {REFERRAL_REWARD:,} so'm tushadi!",
+        f"📎 <b>Havolangiz:</b>\n<code>{ref_link}</code>",
         reply_markup=kb.referral_keyboard(bot_info.username, user_id)
     )
 

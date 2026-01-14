@@ -138,6 +138,10 @@ async def check_bot_started(user_id, bot_username):
 
 async def check_user_subscription(user_id):
     """Foydalanuvchi barcha kanallarga obuna bo'lganini tekshirish"""
+    # Admin majburiy obunadan o'tmaydi
+    if user_id in ADMINS:
+        return True
+    
     channels = db.get_active_channels()
     
     if not channels:
@@ -170,6 +174,10 @@ async def check_user_subscription(user_id):
 
 async def require_subscription(message: Message):
     """Obuna talab qilish"""
+    # Admin majburiy obunadan o'tmaydi
+    if message.from_user.id in ADMINS:
+        return True
+    
     channels = db.get_active_channels()
     if not channels:
         return True
